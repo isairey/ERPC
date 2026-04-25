@@ -34,7 +34,7 @@ GO111MODULE=on go get -u github.com/andeya/erpc/v7
 ### Importación
 
 ```go
-import "github.com/andeya/erpc/v7"
+import "github.com/isairey/erpc"
 ```
 
 ---
