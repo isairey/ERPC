@@ -1,0 +1,81 @@
+package md5_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/andeya/erpc/v7"
+	"github.com/andeya/erpc/v7/xfer"
+	"github.com/andeya/erpc/v7/xfer/md5"
+	"github.com/andeya/goutil"
+)
+
+func init() {
+	// Register filter(custom)
+	md5.Reg('m', "md5")
+}
+
+func TestSeparate(t *testing.T) {
+	md5Check, _ := xfer.Get('m')
+	input := []byte("md5")
+	b, err := md5Check.OnPack(input)
+	if err != nil {
+		t.Fatalf("Onpack: %v", err)
+	}
+
+	_, err = md5Check.OnUnpack(b)
+	if err != nil {
+		t.Fatalf("Md5 check failed: %v", err)
+	}
+
+	// Tamper with data
+	b = append(b, "viruses"...)
+	_, err = md5Check.OnUnpack(b)
+	if err == nil {
+		t.Fatal("Md5 check failed:")
+	}
+}
+
+//go:generate go test -v -c -o "${GOPACKAGE}" $GOFILE
+
+func TestCombined(t *testing.T) {
+	if goutil.IsGoTest() {
+		t.Log("skip test in go test")
+		return
+	}
+	// Server
+	srv := erpc.NewPeer(erpc.PeerConfig{ListenPort: 9090})
+	srv.RouteCall(new(Home))
+	go srv.ListenAndServe()
+	time.Sleep(1e9)
+
+	// Client
+	cli := erpc.NewPeer(erpc.PeerConfig{})
+	sess, stat := cli.Dial(":9090")
+	if !stat.OK() {
+		t.Fatal(stat)
+	}
+	var result interface{}
+	stat = sess.Call("/home/test",
+		map[string]interface{}{
+			"bytes": "test bytes",
+		},
+		&result,
+		// Use custom filter
+		erpc.WithXferPipe('m'),
+	).Status()
+	if !stat.OK() {
+		t.Error(stat)
+	}
+	t.Logf("result:%v", result)
+}
+
+type Home struct {
+	erpc.CallCtx
+}
+
+func (h *Home) Test(arg *map[string]interface{}) (map[string]interface{}, *erpc.Status) {
+	return map[string]interface{}{
+		"result": "your request is:" + (*arg)["bytes"].(string),
+	}, nil
+}
